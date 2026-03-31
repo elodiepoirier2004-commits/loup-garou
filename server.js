@@ -10,36 +10,39 @@ const io = new Server(server);
 app.use(express.static(path.join(__dirname, 'public')));
 
 let players = [];
-let gameState = 'LOBBY'; // LOBBY, NIGHT_WITCH, NIGHT_SEER, NIGHT_WEREWOLVES, DAY
+let currentIndex = 0;
+const phases = ['NIGHT_WEREWOLVES', 'NIGHT_SEER', 'NIGHT_WITCH', 'DAY_VOTE'];
 
 io.on('connection', (socket) => {
-    console.log('Nouveau joueur connecté : ' + socket.id);
-
     socket.on('joinGame', (name) => {
-        if (players.length < 12) {
+        if (!players.find(p => p.id === socket.id)) {
             players.push({ id: socket.id, name, role: null, alive: true });
-            io.emit('updatePlayerList', players);
         }
+        io.emit('updatePlayerList', players);
     });
 
     socket.on('startGame', () => {
-        const roles = ['Voyante', 'Sorcière', 'Loup-Garou', 'Loup-Garou', 'Villageois', 'Villageois'];
-        // Mélange aléatoire (Fisher-Yates)
-        let shuffledRoles = roles.sort(() => Math.random() - 0.5);
-        
+        if (players.length < 1) return; // Pour tester seul, sinon mets 4
+
+        // Distribution simplifiée
+        const rolesPool = ['Loup-Garou', 'Voyante', 'Sorcière', 'Villageois', 'Villageois', 'Villageois'];
         players.forEach((p, i) => {
-            p.role = shuffledRoles[i] || 'Villageois';
+            p.role = rolesPool[i] || 'Villageois';
+            p.alive = true;
             io.to(p.id).emit('assignRole', p.role);
         });
 
-        gameState = 'NIGHT_SEER';
-        io.emit('gameStateUpdate', { state: gameState, players });
+        sendPhaseUpdate('NIGHT_WEREWOLVES');
     });
 
-    socket.on('disconnect', () => {
-        players = players.filter(p => p.id !== socket.id);
-        io.emit('updatePlayerList', players);
-    });
+    function sendPhaseUpdate(phase) {
+        io.emit('gameStateUpdate', { 
+            phase: phase, 
+            players: players.map(p => ({ name: p.name, alive: p.alive, id: p.id })) 
+        });
+    }
+
+    // Ici on pourrait ajouter les socket.on('vote') etc.
 });
 
-server.listen(3000, () => console.log('Serveur lancé sur http://localhost:3000'));
+server.listen(3000, () => console.log('Prêt sur http://localhost:3000'));
